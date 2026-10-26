@@ -48,7 +48,7 @@ All animation lives in [`components/Hero.jsx`](components/Hero.jsx).
 ## Structure
 
 ```
-app/          layout, page, global styles, favicon
+app/          layout, page, global styles
 components/   Hero (animation logic), StatCard
 public/car.png  top-down car image
 data/hero.js  headline text and stats content
