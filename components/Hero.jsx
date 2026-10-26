@@ -15,6 +15,7 @@ const clamp01 = gsap.utils.clamp(0, 1);
 // Road coverage (0–1) at which each stat card appears, in STATS order.
 const CARD_THRESHOLDS = [0.5, 0.6, 0.7, 0.8];
 const LETTER_RISE = 45; // yPercent a letter rises from as the trail uncovers it
+const REAR_INSET = 0.04; // rear bumper position as a fraction of the car width (image has a soft edge)
 
 export default function Hero() {
   const sectionRef = useRef(null);
@@ -95,8 +96,8 @@ export default function Hero() {
           const render = () => {
             // The car drives fully off the road, so the trail covers every letter on any width.
             const carX = state.p * (m.roadW + 40); // +40 clears the drop shadow too
-            // Trail edge sits under the car's centre, capped once the whole road is covered.
-            const paint = Math.min(carX + m.carW / 2, m.roadW);
+            // Trail edge follows the car's rear bumper, capped once the whole road is covered.
+            const paint = Math.min(carX + m.carW * REAR_INSET, m.roadW);
             const coverage = paint / m.roadW;
 
             setCarX(carX);
