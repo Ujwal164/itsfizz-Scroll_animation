@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-track: #d1d1d1;
+  --color-road: #1e1e1e;
+  --color-trail: #45db7d;
+  --color-ink: #111111;
+  --color-lime: #def54f;
+  --color-sky: #6ac9ff;
+  --color-charcoal: #333333;
+  --color-orange: #fa7328;
+}
+
+html,
+body {
+  background: var(--color-road);
+  overflow-x: hidden;
+}
+
+/* Faint version of each headline letter, shown before the car "paints" it. */
+.letter-ghost {
+  color: rgb(255 255 255 / 0.09);
+}
+
+/* Only the car moves every frame; hint the compositor. */
+.car {
+  will-change: transform;
+}
