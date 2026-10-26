@@ -4,20 +4,23 @@ import { useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import Car from "./Car";
 import StatCard from "./StatCard";
 import { HEADLINE, STATS } from "@/data/hero";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const clamp01 = gsap.utils.clamp(0, 1);
-const CARD_LIFT = 14; // px a stat card rises while the car passes under it
-const CARD_RANGE = 320; // px either side of a card where the lift is felt
+
+// Road coverage (0–1) at which each stat card appears, in STATS order.
+const CARD_THRESHOLDS = [0.5, 0.6, 0.7, 0.8];
+const LETTER_RISE = 45; // yPercent a letter rises from as the trail uncovers it
 
 export default function Hero() {
   const sectionRef = useRef(null);
   const roadRef = useRef(null);
-  const trailRef = useRef(null);
+  const revealRef = useRef(null);
+  const revealInnerRef = useRef(null);
   const headlineRef = useRef(null);
   const carRef = useRef(null);
 
@@ -25,13 +28,12 @@ export default function Hero() {
     () => {
       const section = sectionRef.current;
       const road = roadRef.current;
-      const trail = trailRef.current;
+      const reveal = revealRef.current;
+      const revealInner = revealInnerRef.current;
       const headline = headlineRef.current;
       const car = carRef.current;
       const letters = gsap.utils.toArray(".letter", section);
-      const fills = gsap.utils.toArray(".letter-fill", section);
       const stats = gsap.utils.toArray(".stat", section);
-      const cards = gsap.utils.toArray(".stat-card", section);
       const hint = section.querySelector(".scroll-hint");
 
       const mm = gsap.matchMedia();
@@ -46,57 +48,73 @@ export default function Hero() {
 
           // Section starts hidden in CSS to avoid a flash of un-animated content.
           gsap.set(section, { autoAlpha: 1 });
+          gsap.set(stats, { autoAlpha: 0, y: reduce ? 0 : 40, scale: reduce ? 1 : 0.92 });
 
-          /* ---------- 1. Intro: time-based, plays once on load ---------- */
-          const intro = gsap.timeline({ defaults: { ease: "power3.out" } });
-
-          if (reduce) {
-            intro.from([car, ...letters, ...stats, hint], { opacity: 0, duration: 0.6, stagger: 0.03 });
-          } else {
-            intro
-              .from(car, { xPercent: -120, duration: 1.4, ease: "power4.out" })
-              .from(letters, { yPercent: 70, opacity: 0, duration: 1, stagger: 0.045 }, 0.15)
-              .from(stats, { y: 40, opacity: 0, scale: 0.95, duration: 0.9, stagger: 0.15 }, 0.75)
-              .from(hint, { y: 10, opacity: 0, duration: 0.6 }, "-=0.4");
-          }
+          /* ---------- 1. Intro: the car rolls onto the road ---------- */
+          gsap
+            .timeline({ defaults: { ease: "power3.out" } })
+            .from(car, reduce ? { opacity: 0, duration: 0.6 } : { xPercent: -110, duration: 1.6, ease: "power4.out" })
+            .from(hint, { y: 10, opacity: 0, duration: 0.7 }, "-=0.6");
 
           /* ---------- 2. Scroll: progress-driven, pinned ---------- */
           // Layout is read only here: on setup and on every ScrollTrigger refresh (e.g. resize).
           // The per-frame render() below reads nothing from the DOM.
-          const m = { roadW: 1, carW: 0, travel: 0, letters: [], cards: [] };
+          const m = { roadW: 1, carW: 0, letters: [] };
           const measure = () => {
             m.roadW = road.offsetWidth || 1;
             m.carW = car.offsetWidth;
-            // The car exits the road completely, so the trail covers every letter on any screen width.
-            m.travel = m.roadW;
-            m.letters = fills.map(({ parentElement: el }) => ({
+            m.letters = letters.map((el) => ({
               left: headline.offsetLeft + el.offsetLeft,
               width: el.offsetWidth || 1,
             }));
-            m.cards = stats.map((el) => el.offsetLeft + el.offsetWidth / 2);
           };
 
-          // quickSetters write transform/opacity directly, skipping tween overhead.
+          // quickSetters write transforms directly, skipping tween overhead.
           const setCarX = gsap.quickSetter(car, "x", "px");
-          const setTrail = gsap.quickSetter(trail, "scaleX");
-          const setFill = fills.map((el) => gsap.quickSetter(el, "opacity"));
-          const setCardY = cards.map((el) => gsap.quickSetter(el, "y", "px"));
+          const setRevealX = gsap.quickSetter(reveal, "x", "px");
+          const setRevealInnerX = gsap.quickSetter(revealInner, "x", "px");
+          const setLetterY = letters.map((el) => gsap.quickSetter(el, "yPercent"));
           const setHint = gsap.quickSetter(hint.firstElementChild, "opacity");
+
+          // Cards are triggered (not scrubbed) once their threshold is crossed,
+          // so each one gets a full, eased entrance; scrolling back hides them again.
+          const cardShown = stats.map(() => false);
+          const toggleCard = (i, show) => {
+            cardShown[i] = show;
+            gsap.to(stats[i], {
+              autoAlpha: show ? 1 : 0,
+              y: show || reduce ? 0 : 40,
+              scale: show || reduce ? 1 : 0.92,
+              duration: show ? 0.8 : 0.4,
+              ease: show ? "back.out(1.6)" : "power2.in",
+              overwrite: true,
+            });
+          };
 
           const state = { p: 0 };
           const render = () => {
-            const carX = state.p * m.travel;
-            const paint = carX + m.carW / 2; // the trail ends at the car's centre
+            // The car drives fully off the road, so the trail covers every letter on any width.
+            const carX = state.p * (m.roadW + 40); // +40 clears the drop shadow too
+            // Trail edge sits under the car's centre, capped once the whole road is covered.
+            const paint = Math.min(carX + m.carW / 2, m.roadW);
+            const coverage = paint / m.roadW;
 
             setCarX(carX);
-            setTrail(paint / m.roadW);
-            // Each letter fades in across its own width as the trail sweeps over it.
-            m.letters.forEach(({ left, width }, i) => setFill[i](clamp01((paint - left) / width)));
-            // Cards rise smoothly as the car approaches, settle as it leaves.
-            m.cards.forEach((centre, i) => {
-              const near = clamp01(1 - Math.abs(paint - centre) / CARD_RANGE);
-              setCardY[i](-CARD_LIFT * near * near);
+            // Mask: the outer layer slides in from the left, the inner layer slides the
+            // opposite way, so the headline stays put and only shows where the trail is.
+            setRevealX(paint - m.roadW);
+            setRevealInnerX(m.roadW - paint);
+
+            m.letters.forEach(({ left, width }, i) => {
+              const t = clamp01((paint - left) / (width * 1.5));
+              setLetterY[i](reduce ? 0 : LETTER_RISE * (1 - t) * (1 - t));
             });
+
+            CARD_THRESHOLDS.forEach((threshold, i) => {
+              const show = coverage >= threshold;
+              if (show !== cardShown[i]) toggleCard(i, show);
+            });
+
             setHint(1 - clamp01(state.p * 10));
           };
 
@@ -110,11 +128,12 @@ export default function Hero() {
             scrollTrigger: {
               trigger: section,
               start: "top top",
-              end: "+=200%",
+              end: "+=250%",
               pin: true,
-              // scrub: 1 eases the car towards the scroll position over ~1s,
-              // so wheel "steps" turn into fluid motion.
-              scrub: reduce ? true : 1,
+              anticipatePin: 1,
+              // scrub eases the car towards the scroll position, so wheel "steps"
+              // turn into one fluid drive.
+              scrub: reduce ? true : 1.2,
               onRefresh: () => {
                 measure();
                 render();
@@ -138,31 +157,44 @@ export default function Hero() {
         aria-label="Welcome to ItzFizz"
       >
         <div className="absolute inset-0 flex items-center">
-          <div ref={roadRef} className="relative h-28 w-full overflow-hidden bg-road md:h-48">
+          <div ref={roadRef} className="relative h-28 w-full overflow-hidden bg-road md:h-52">
+            {/* lane markings */}
+            <div className="lane absolute inset-x-0 top-1/2 h-1 -translate-y-1/2" />
+            <div className="absolute inset-x-0 top-2 h-px bg-white/10 md:top-3" />
+            <div className="absolute inset-x-0 bottom-2 h-px bg-white/10 md:bottom-3" />
+
+            {/* trail + headline mask */}
             <div
-              ref={trailRef}
-              className="absolute inset-0 origin-left bg-trail"
-              style={{ transform: "scaleX(0)" }}
-            />
-
-            <h1
-              ref={headlineRef}
-              aria-label="Welcome ItzFizz"
-              className="absolute inset-y-0 left-[4vw] flex items-center gap-[0.08em] text-[clamp(1.6rem,6.6vw,7.5rem)] leading-none font-extrabold"
+              ref={revealRef}
+              className="absolute inset-0 overflow-hidden bg-trail"
+              style={{ transform: "translateX(-100%)" }}
             >
-              {[...HEADLINE].map((char, i) =>
-                char === " " ? (
-                  <span key={i} className="letter inline-block w-[0.4em]" aria-hidden="true" />
-                ) : (
-                  <span key={i} className="letter relative inline-block" aria-hidden="true">
-                    <span className="letter-ghost">{char}</span>
-                    <span className="letter-fill absolute inset-0 text-ink opacity-0">{char}</span>
-                  </span>
-                ),
-              )}
-            </h1>
+              <div ref={revealInnerRef} className="absolute inset-0" style={{ transform: "translateX(100%)" }}>
+                <h1
+                  ref={headlineRef}
+                  aria-label="Welcome ItzFizz"
+                  className="absolute inset-y-0 left-[4vw] flex items-center gap-[0.08em] text-[clamp(1.6rem,6.6vw,7.5rem)] leading-none font-extrabold text-ink"
+                >
+                  {[...HEADLINE].map((char, i) =>
+                    char === " " ? (
+                      <span key={i} className="inline-block w-[0.4em]" aria-hidden="true" />
+                    ) : (
+                      <span key={i} className="letter inline-block" aria-hidden="true">
+                        {char}
+                      </span>
+                    ),
+                  )}
+                </h1>
+              </div>
+            </div>
 
-            <Car ref={carRef} className="absolute top-0 left-0 z-10 h-full" />
+            <div
+              ref={carRef}
+              className="car absolute top-[6%] left-0 z-10 aspect-[735/388] h-[88%]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- static export, no image optimizer */}
+              <img src={`${BASE_PATH}/car.png`} alt="" className="h-full w-full" draggable="false" />
+            </div>
           </div>
         </div>
 

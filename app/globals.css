@@ -19,12 +19,13 @@ body {
   overflow-x: hidden;
 }
 
-/* Faint version of each headline letter, shown before the car "paints" it. */
-.letter-ghost {
-  color: rgb(255 255 255 / 0.09);
+/* Dashed centre line on the road. */
+.lane {
+  background: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.35) 0 48px, transparent 48px 96px);
 }
 
-/* Only the car moves every frame; hint the compositor. */
+/* The car moves every frame; hint the compositor. The shadow lifts it off the road. */
 .car {
   will-change: transform;
+  filter: drop-shadow(0 10px 14px rgb(0 0 0 / 0.55));
 }

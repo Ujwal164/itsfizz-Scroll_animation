@@ -1,6 +1,6 @@
 # ItzFizz — Scroll-Driven Hero
 
-A hero section where a car drives along a road as you scroll. A green trail follows the car and reveals **W E L C O M E  I T Z F I Z Z**, while impact stats sit around the road.
+A hero section where a car drives along a road as you scroll. A green trail follows the car and reveals **W E L C O M E  I T Z F I Z Z**, and impact stats pop in once half the road is covered.
 
 ## Stack
 
@@ -23,16 +23,12 @@ npm run build   # static site in ./out
 
 All animation lives in [`components/Hero.jsx`](components/Hero.jsx).
 
-**1. Load intro (time-based)** — one GSAP timeline:
-- the car glides in from off-screen (`power4.out`)
-- headline letters rise and fade in one by one (`stagger: 0.045`)
-- the four stat cards follow one by one (`stagger: 0.15`)
+**1. Load intro (time-based)**: the car rolls onto the road from off-screen (`power4.out`), then the "Scroll to drive" hint fades in.
 
-**2. Scroll (progress-based)** — a single tween drives `state.p` from 0 to 1, tied to a pinned `ScrollTrigger` (`end: "+=200%"`, `scrub: 1`). The `scrub` value smooths the progress towards the scroll position, so wheel steps become fluid motion. Every frame, `render()` maps `p` to:
-- **car**: `x` from 0 to the road width (the car drives off-screen)
-- **trail**: `scaleX` up to the car's centre (transform, not width, so no reflow)
-- **letters**: each letter's fill fades in across its own width as the trail passes over it
-- **stat cards**: lift slightly while the car passes beneath them
+**2. Scroll (progress-based)**: a single tween drives `state.p` from 0 to 1, tied to a pinned `ScrollTrigger` (`end: "+=250%"`, `scrub: 1.2`). The `scrub` value smooths the progress towards the scroll position, so wheel steps become one fluid drive. Every frame, `render()` maps `p` to:
+- **car**: `x` from the left edge until it drives off the road
+- **trail + headline**: the green trail is a mask made of two layers moving in opposite directions (outer `x = edge - roadWidth`, inner `x = roadWidth - edge`). The headline sits inside it, so text is **hidden until the car passes** and appears exactly where the trail is. Each letter also rises into place as it is uncovered.
+- **stat cards**: hidden at first. Once the trail covers **50%, 60%, 70% and 80%** of the road, the cards pop in one by one (`back.out` ease). Scrolling back hides them again.
 
 **Performance**
 - Only `transform` and `opacity` are animated.
@@ -40,7 +36,7 @@ All animation lives in [`components/Hero.jsx`](components/Hero.jsx).
 - `gsap.quickSetter` writes values directly, without creating tweens per frame.
 
 **Accessibility**
-- `prefers-reduced-motion` gets a simple fade intro and an unsmoothed scrub.
+- `prefers-reduced-motion` gets fades only and an unsmoothed scrub.
 - The headline has an `aria-label`, so screen readers read "Welcome ItzFizz" instead of single letters.
 
 ## Deploy (GitHub Pages)
@@ -53,6 +49,7 @@ All animation lives in [`components/Hero.jsx`](components/Hero.jsx).
 
 ```
 app/          layout, page, global styles, favicon
-components/   Hero (animation logic), Car (inline SVG), StatCard
+components/   Hero (animation logic), StatCard
+public/car.png  top-down car image
 data/hero.js  headline text and stats content
 ```
